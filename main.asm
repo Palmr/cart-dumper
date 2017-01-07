@@ -15,6 +15,7 @@ TileData:
 HexTiles:
 	chr_HEXCHARS
 	
+HEX_CHAR_VRAM EQU $9000
 NUM1 EQU $c000
 NUM2 EQU $c001
 NUM1_POS EQU $9831
@@ -38,28 +39,28 @@ begin:
 	ld  [rSCY], a
 
 	ld   	hl, TileData ; load tiles to vram
-	ld 		de, $8000
+	ld 		de, _VRAM
 	ld		bc, 8*256        ; length (8 bytes per tile) x (256 tiles)
 	call	mem_CopyMono    ; Copy tile data to memory
 
 	ld   	hl, HexTiles ; load hex-chars tiles to vram
-	ld 		de, $9000
+	ld 		de, HEX_CHAR_VRAM
 	ld		bc, 8*16        ; length (8 bytes per tile) x (16 tiles)
 	call	mem_CopyMono    ; Copy tile data to memory
 
 	ld   	a, $20           ; Fill bg map with spaces
-	ld   	hl, $9800
+	ld   	hl, _SCRN0
 	ld  	bc, SCRN_VX_B * SCRN_VY_B
 	call	mem_Set
 
 	ld      hl, Title       ; Draw title
-	ld      de, $9800+(SCRN_VY_B*$11)
+	ld      de, _SCRN0+(SCRN_VY_B*$11)
 	ld      bc, 20
 	call    mem_Copy
 	
 	; copy mainloop to ram
-	ld      hl,$4000
-	ld      de,$c000
+	ld      hl, $4000
+	ld      de, $c000
 	ld      bc, $0eff ; roughly enough bytes?
 	call    mem_Copy
 	
@@ -117,6 +118,33 @@ SECTION "MainLoop",CODE[$4000]
 		cp STATF_VB
 		jr nz, .wait
 
+.drawChars:
+	; draw numbers
+	lcd_WaitVRAM
+	ld a, [NUM1]
+	ld [NUM1_POS], a
+	ld a, [NUM2]
+	ld [NUM2_POS], a
+
+	; show cart title
+	lcd_WaitVRAM
+	ld hl, CART_TITLE ; cart title location in rom
+	ld de, _SCRN0+3+(SCRN_VY_B*8) ; position on screen to draw to
+	ld bc, 15 ; 15 chars
+	inc	b
+	inc	c
+	jr	.skip
+.loop	ld	a,[hl+]
+	cp 0
+	jr nz, .draw ; if not zero go straight to draw
+	ld a, $20 ; load a with $20 = space
+.draw	ld	[de],a
+	inc	de
+.skip	dec	c
+	jr	nz,.loop
+	dec	b
+	jr	nz,.loop
+
 	;input
 	LD A,$20       ;<- bit 5 = $20
 	LD [$FF00],A   ;<- select P14 by setting it low
@@ -155,14 +183,22 @@ SECTION "MainLoop",CODE[$4000]
 	;		$10 - A                 $1 - Right
 	ld b, $db
 	ld a, [$FF8B]
-.btnA:
-	bit PADB_A, a
+.start:
+	bit PADB_START, a
+	jr z, .select
+	ld b, $53
+.select:
+	bit PADB_SELECT, a
 	jr z, .btnB
-	ld b, $61
+	ld b, $73
 .btnB:
 	bit PADB_B, a
-	jr z, .down
+	jr z, .btnA
 	ld b, $62
+.btnA:
+	bit PADB_A, a
+	jr z, .down
+	ld b, $61
 .down:
 	bit PADB_DOWN, a
 	jr z, .up
@@ -182,14 +218,8 @@ SECTION "MainLoop",CODE[$4000]
 .joyOut:
 	ld a, b
 	ld [$9821], a ; draw joypad char
-		
-.drawChars:
-	; draw numbers
-	lcd_WaitVRAM
-	ld a, [NUM1]
-	ld [NUM1_POS], a
-	ld a, [NUM2]
-	ld [NUM2_POS], a
+
+
 	
 	; wait for one val to overflow
 	ld a, [TM1]
@@ -218,25 +248,6 @@ SECTION "MainLoop",CODE[$4000]
 	jp nz, COPIED_MAIN_LOOP
 	ld a, $30
 	ld [NUM2], a
-
-	; show cart title
-	lcd_WaitVRAM
-	ld hl, CART_TITLE ; cart title location in rom
-	ld de, $9800+3+(SCRN_VY_B*8) ; position on screen to draw to
-	ld bc, 15 ; 15 chars
-	inc	b
-	inc	c
-	jr	.skip
-.loop	ld	a,[hl+]
-	cp 0
-	jr nz, .draw ; if not zero go straight to draw
-	ld a, $20 ; load a with $20 = space
-.draw	ld	[de],a
-	inc	de
-.skip	dec	c
-	jr	nz,.loop
-	dec	b
-	jr	nz,.loop
 	
 	; ...and inc NUM1
 	ld a, [NUM1]
