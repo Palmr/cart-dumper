@@ -14,16 +14,16 @@ TileData:
 	chr_IBMPC1      1,8
 HexTiles:
 	chr_HEXCHARS
-	
+
 HEX_CHAR_VRAM EQU $9000
-NUM1 EQU $c000
-NUM2 EQU $c001
-NUM1_POS EQU $9831
-NUM2_POS EQU $9832
-TM1 EQU $c002
-TM2 EQU $c003
+
+JOY_CHAR EQU _HRAM+1
+CART_IN EQU _HRAM+2
+VAR_COUNT EQU 3
+
+CART_NINTY_LOGO EQU $0104
+COPY_NINTY_LOGO EQU $CFCF
 CART_TITLE EQU $0134
-COPIED_MAIN_LOOP EQU $c004
 
 begin:
 
@@ -37,6 +37,12 @@ begin:
 	ld  a, 0 ; init scroll registers
 	ld  [rSCX], a
 	ld  [rSCY], a
+
+	; Zero out HRAM (where I store  vars)
+	ld   	a, 0
+	ld   	hl, _HRAM
+	ld  	bc, VAR_COUNT ; amount of vars
+	call	mem_Set
 
 	ld   	hl, TileData ; load tiles to vram
 	ld 		de, _VRAM
@@ -60,28 +66,23 @@ begin:
 	
 	; copy mainloop to ram
 	ld      hl, $4000
-	ld      de, $c000
+	ld      de, _RAM
 	ld      bc, $0eff ; roughly enough bytes?
 	call    mem_Copy
 	
-	; Set and display numbers
-	ld a, $30
-	ld [NUM1], a
-	ld [NUM2], a
-	ld [NUM1_POS], a
-	ld [NUM2_POS], a
-	
-	; Set loop-delay timers to 0
-	ld a, $0
-	ld [TM1], a
-	ld [TM2], a
+	; copy Nintendo logo to ram (to compare and check carts are in)
+	ld      hl, CART_NINTY_LOGO
+	ld      de, COPY_NINTY_LOGO
+	ld      bc, 48
+	call    mem_Copy
 
+	
 	; Turn screen on
 	ld      a,LCDCF_ON|LCDCF_BG8000|LCDCF_BG9800|LCDCF_BGON|LCDCF_OBJ16|LCDCF_OBJOFF
 	ld      [rLCDC],a       
 	
 	; jump to copied code in ram
-	jp COPIED_MAIN_LOOP
+	jp _RAM
 
 Title:
 	DB $DB, $B2, $B1, $B0
@@ -105,11 +106,7 @@ StopLCD:
         ret
 
 SECTION "MainLoop",CODE[$4000]
-		nop
-		nop
-		nop
-		nop
-		
+	nop
 .mainLoop:
 		; wait for vblank
 .wait:
@@ -118,16 +115,10 @@ SECTION "MainLoop",CODE[$4000]
 		cp STATF_VB
 		jr nz, .wait
 
-.drawChars:
-	; draw numbers
+.VRAMStuff:
 	lcd_WaitVRAM
-	ld a, [NUM1]
-	ld [NUM1_POS], a
-	ld a, [NUM2]
-	ld [NUM2_POS], a
 
 	; show cart title
-	lcd_WaitVRAM
 	ld hl, CART_TITLE ; cart title location in rom
 	ld de, _SCRN0+3+(SCRN_VY_B*8) ; position on screen to draw to
 	ld bc, 15 ; 15 chars
@@ -136,16 +127,24 @@ SECTION "MainLoop",CODE[$4000]
 	jr	.skip
 .loop	ld	a,[hl+]
 	cp 0
-	jr nz, .draw ; if not zero go straight to draw
+	jr nz, .writeChar ; if not zero go straight to draw
 	ld a, $20 ; load a with $20 = space
-.draw	ld	[de],a
+.writeChar	ld	[de],a
 	inc	de
 .skip	dec	c
 	jr	nz,.loop
 	dec	b
 	jr	nz,.loop
 
-	;input
+	; draw joypad char
+	ld a, [JOY_CHAR]
+	ld [$9821], a
+
+	; draw cart in char
+	ld a, [CART_IN]
+	ld [$9841], a
+
+.ReadJoypad:
 	LD A,$20       ;<- bit 5 = $20
 	LD [$FF00],A   ;<- select P14 by setting it low
 	LD A,[$FF00]   ;
@@ -217,51 +216,30 @@ SECTION "MainLoop",CODE[$4000]
 	ld b, $1a
 .joyOut:
 	ld a, b
-	ld [$9821], a ; draw joypad char
+	ld [JOY_CHAR], a
 
 
+	; test cart (y=$79, n=$6e)
+	ld a, $6e
+	ld [CART_IN], a ; Default cart in to 'no'
+	LD HL, $0104		; point HL to Nintendo logo in cart
+	LD DE, COPY_NINTY_LOGO		; point DE to Nintendo logo in DMG rom
+.logoCmpLoop:
+	LD A,[DE] ; a = copy[de]
+	INC DE		; de++
+	CP [HL]		; a == cart[hl]
+	JR NZ, .endLogoCmpLoop; if not a match, lock up here
+	INC HL		; hl++
+	LD A, L		; 
+	CP $34		; $00ed	;do this for $30 bytes
+	JR NZ, .logoCmpLoop
+.validCart:
+	ld a, $79
+	ld [CART_IN], a
+.endLogoCmpLoop:
 	
-	; wait for one val to overflow
-	ld a, [TM1]
-	inc a
-	ld [TM1], a
-	cp $ff
-	jp nz, COPIED_MAIN_LOOP
-	; wait for that 10 times..
-	ld a, [TM2]
-	inc a
-	ld [TM2], a
-	cp 1                     ;; np lowered to speed up
-	jp nz, COPIED_MAIN_LOOP
-	; reset zero timers
-	ld a, 0
-	ld [TM1], a
-	ld [TM2], a
-
-	; inc NUM2
-	ld a, [NUM2]
-	inc a
-	ld [NUM2], a
 	
-	; reset if over 9...
-	cp $3a
-	jp nz, COPIED_MAIN_LOOP
-	ld a, $30
-	ld [NUM2], a
+	jp _RAM
 	
-	; ...and inc NUM1
-	ld a, [NUM1]
-	inc a
-	ld [NUM1], a
-	
-	; reset if over 9
-	cp $3a
-	jp nz, COPIED_MAIN_LOOP
-	ld a, $30
-	ld [NUM1], a
-	
-	jp COPIED_MAIN_LOOP
-	nop
-	nop
+	; code end-identifier
 	DB $ca,$fe,$ba,$be
-
