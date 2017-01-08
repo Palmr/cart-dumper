@@ -17,8 +17,9 @@ HexTiles:
 
 HEX_CHAR_VRAM EQU $9000
 
-JOY_CHAR EQU _HRAM+1
-CART_IN EQU _HRAM+2
+JOY_CHAR EQU _HRAM
+CART_IN EQU _HRAM+1
+TX_TIMER EQU _HRAM+2
 VAR_COUNT EQU 3
 
 CART_NINTY_LOGO EQU $0104
@@ -63,24 +64,24 @@ begin:
 	ld      de, _SCRN0+(SCRN_VY_B*$11)
 	ld      bc, 20
 	call    mem_Copy
-	
+
 	; copy mainloop to ram
 	ld      hl, $4000
 	ld      de, _RAM
 	ld      bc, $0eff ; roughly enough bytes?
 	call    mem_Copy
-	
+
 	; copy Nintendo logo to ram (to compare and check carts are in)
 	ld      hl, CART_NINTY_LOGO
 	ld      de, COPY_NINTY_LOGO
 	ld      bc, 48
 	call    mem_Copy
 
-	
+
 	; Turn screen on
 	ld      a,LCDCF_ON|LCDCF_BG8000|LCDCF_BG9800|LCDCF_BGON|LCDCF_OBJ16|LCDCF_OBJOFF
-	ld      [rLCDC],a       
-	
+	ld      [rLCDC],a
+
 	; jump to copied code in ram
 	jp _RAM
 
@@ -88,6 +89,7 @@ Title:
 	DB $DB, $B2, $B1, $B0
 	DB "Cart Dumper!"
 	DB $B0, $B1, $B2, $DB
+
 
 ; *** Turn off the LCD display ***
 StopLCD:
@@ -109,11 +111,11 @@ SECTION "MainLoop",CODE[$4000]
 	nop
 .mainLoop:
 		; wait for vblank
-.wait:
+.vblankWait:
 		ld a, [rSTAT]
 		and $03
 		cp STATF_VB
-		jr nz, .wait
+		jr nz, .vblankWait
 
 .VRAMStuff:
 	lcd_WaitVRAM
@@ -124,17 +126,17 @@ SECTION "MainLoop",CODE[$4000]
 	ld bc, 15 ; 15 chars
 	inc	b
 	inc	c
-	jr	.skip
-.loop	ld	a,[hl+]
+	jr	.ctSkip
+.cartTitleLoop	ld a,[hl+]
 	cp 0
 	jr nz, .writeChar ; if not zero go straight to draw
 	ld a, $20 ; load a with $20 = space
-.writeChar	ld	[de],a
+.writeChar ld	[de], a
 	inc	de
-.skip	dec	c
-	jr	nz,.loop
+.ctSkip	dec	c
+	jr	nz, .cartTitleLoop
 	dec	b
-	jr	nz,.loop
+	jr	nz, .cartTitleLoop
 
 	; draw joypad char
 	ld a, [JOY_CHAR]
@@ -143,6 +145,54 @@ SECTION "MainLoop",CODE[$4000]
 	; draw cart in char
 	ld a, [CART_IN]
 	ld [$9841], a
+
+
+	; Extract ROM if Start pressed and there's a cart in
+	ld a, [CART_IN]
+	cp $79 ; ascii y
+	jr nz, .endExtract
+	ld a, [JOY_CHAR]
+	cp $53 ; ascii S
+	jr nz, .endExtract
+	; start extract routine
+	ld hl, $0000 ; start at the beginning...
+	ld bc, 10 ; end of both ROM banks (okay for cart type 0)
+	inc	b
+	inc	c
+	jr	.exSkip
+;.exLoop	ld a,[hl+]
+.exLoop	ld a, $55 ; fixed output bit pattern 01010101
+	ld	[rSB], a ; Put byte in serial buffer
+	ld a, 0
+	ld [TX_TIMER], a ; zero the tx timer
+	ld a, $81
+	ld [rSC], a ; Start transfer, using internal clock
+.txCheck:
+	ld a, [rSC]
+	BIT 7, a ; Test transfer flag
+	jr z, .tskip ; if zero, skip timer
+	ld a, [TX_TIMER] ; inc timer
+	inc a ; inc timer
+	ld [TX_TIMER], a ; inc timer
+	cp $ff
+	jr nz, .txCheck ; if timer != $ff, recheck the tx flag
+	; wait for transfer to end...
+.tskip	ld a, 0
+ ld [TX_TIMER], a ; zero the tx timer
+	; pause a bit
+.postTxPause:	ld a, [TX_TIMER] ; inc timer
+	inc a ; inc timer
+	ld [TX_TIMER], a ; inc timer
+	cp $ff
+	jr nz, .postTxPause ; if timer != $ff, recheck the tx flag
+.exSkip	dec	c
+	jr	nz, .exLoop
+	dec	b
+	jr	nz, .exLoop
+.endExtract:
+
+
+
 
 .ReadJoypad:
 	LD A,$20       ;<- bit 5 = $20
@@ -175,11 +225,7 @@ SECTION "MainLoop",CODE[$4000]
 								 ;
 	LD A,$30       ;<- deselect P14 and P15
 	LD [$FF00],A   ;<- RESET Joypad
-	; look for start, 18=up, 19=down, 1a=right, 1b=left
-	;		$80 - Start             $8 - Down
-	;		$40 - Select            $4 - Up
-	;		$20 - B                 $2 - Left
-	;		$10 - A                 $1 - Right
+	; Test joypad and put ascii char in b
 	ld b, $db
 	ld a, [$FF8B]
 .start:
@@ -219,7 +265,7 @@ SECTION "MainLoop",CODE[$4000]
 	ld [JOY_CHAR], a
 
 
-	; test cart (y=$79, n=$6e)
+	; Test if a valid cart is there (y=$79, n=$6e)
 	ld a, $6e
 	ld [CART_IN], a ; Default cart in to 'no'
 	LD HL, $0104		; point HL to Nintendo logo in cart
@@ -230,16 +276,16 @@ SECTION "MainLoop",CODE[$4000]
 	CP [HL]		; a == cart[hl]
 	JR NZ, .endLogoCmpLoop; if not a match, lock up here
 	INC HL		; hl++
-	LD A, L		; 
+	LD A, L		;
 	CP $34		; $00ed	;do this for $30 bytes
 	JR NZ, .logoCmpLoop
 .validCart:
 	ld a, $79
 	ld [CART_IN], a
 .endLogoCmpLoop:
-	
-	
+
+
 	jp _RAM
-	
+
 	; code end-identifier
 	DB $ca,$fe,$ba,$be
