@@ -15,7 +15,7 @@ TileData:
 HexTiles:
 	chr_HEXCHARS
 
-HEX_CHAR_VRAM EQU $9000
+HEX_CHAR_VRAM_OFFSET EQU $f0
 
 JOY_CHAR EQU _HRAM
 CART_IN EQU _HRAM+1
@@ -51,7 +51,7 @@ begin:
 	call	mem_CopyMono    ; Copy tile data to memory
 
 	ld   	hl, HexTiles ; load hex-chars tiles to vram
-	ld 		de, HEX_CHAR_VRAM
+	ld 		de, _VRAM + $0f00
 	ld		bc, 8*16        ; length (8 bytes per tile) x (16 tiles)
 	call	mem_CopyMono    ; Copy tile data to memory
 
@@ -146,6 +146,17 @@ SECTION "MainLoop",CODE[$4000]
 	ld a, [CART_IN]
 	ld [$9841], a
 
+	; draw SB
+	ld a, [rSB]
+	and $0f
+	add HEX_CHAR_VRAM_OFFSET
+	ld [$9832], a
+	ld a, [rSB] ; high bits
+	swap a
+	and $0f
+	add HEX_CHAR_VRAM_OFFSET
+	ld [$9831], a
+
 
 	; Extract ROM if Start pressed and there's a cart in
 	ld a, [CART_IN]
@@ -156,12 +167,11 @@ SECTION "MainLoop",CODE[$4000]
 	jr nz, .endExtract
 	; start extract routine
 	ld hl, $0000 ; start at the beginning...
-	ld bc, 10 ; end of both ROM banks (okay for cart type 0)
+	ld bc, $8000 ; end of both ROM banks (okay for cart type 0)
 	inc	b
 	inc	c
 	jr	.exSkip
-;.exLoop	ld a,[hl+]
-.exLoop	ld a, $55 ; fixed output bit pattern 01010101
+.exLoop	ld a,[hl+]
 	ld	[rSB], a ; Put byte in serial buffer
 	ld a, 0
 	ld [TX_TIMER], a ; zero the tx timer
