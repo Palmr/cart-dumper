@@ -4,6 +4,10 @@ This is a rom that loads its main loop into ram on the Gameboy, lets you swap ca
 
 Currently tested using an EMS 64M flashcart and both a Gameboy pocket and Gameboy Color.
 
+## Screenshots
+
+![Running in BGB](screenshots/screenshot-1.gif)
+
 ## TODO
 
 - [x] Build a ROM showing text on the screen using RGBDS

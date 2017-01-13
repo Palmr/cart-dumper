@@ -102,9 +102,9 @@ begin:
 	call	mem_Set
 
 	;; Initialise background tiles
-	; Put the ROM title line at the bottom of the background
+	; Draw ROM title
 	ld      hl, RomTitle
-	ld      de, _SCRN0 + (SCRN_VY_B * (SCRN_Y_B - 1))
+	ld      de, _SCRN0
 	ld      bc, 20
 	call    mem_Copy
 	; Draw cart prompt
@@ -275,17 +275,17 @@ SECTION "MainLoop",CODE[$4000]
 ;; DEBUG DRAWING
 	; Draw joypad char
 	ld a, [VAR_JOY_CHAR]
-	ld [$9821], a
+	ld [$9A20], a
 	; Draw SB
 	ld a, [rSB]
 	and $0f
 	add VRO_HEX_CHAR
-	ld [$9832], a ; low nibble
+	ld [$9A33], a ; low nibble
 	ld a, [rSB]
 	swap a
 	and $0f
 	add VRO_HEX_CHAR
-	ld [$9831], a ; high nibble
+	ld [$9A32], a ; high nibble
 ;; DEBUG DRAWING
 
 
