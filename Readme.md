@@ -23,8 +23,8 @@ Currently tested using an EMS 64M flashcart and both a Gameboy pocket and Gamebo
   - [ ] Support SRAM reading
   - [ ] Add support for checking the data was properly recieved
   - [ ] Screen display dump progress
-    - Add stat check in TX loop, only display if clear, no need to block
-  - [ ] Option to dump via external clock
+    - Add stat check in TX loop, only display if clear. No need to loop-block
+  - [ ] Option to dump using external clock
     - Would need a re-work of the post-TX delay timer code
 - [ ] Add other dumping methods
   - View hex on screen
@@ -34,6 +34,7 @@ Currently tested using an EMS 64M flashcart and both a Gameboy pocket and Gamebo
   - Nice dump process bar
   - Menu for dump methods
   - Menu for what to dump
+  - Option to boot the cart that's plugged in
 
 ## To Build
 
