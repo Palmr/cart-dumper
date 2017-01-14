@@ -35,7 +35,8 @@ CART_NINTY_LOGO_LEN EQU CART_TITLE - CART_NINTY_LOGO
 VAR_JOY_CHAR EQU _HRAM
 VAR_CART_IN EQU _HRAM+1
 VAR_TX_TIMER EQU _HRAM+2
-VAR_COUNT EQU 3
+VAR_CURRENT_BANK EQU _HRAM+3
+VAR_COUNT EQU 4
 
 ; RAM CONST locations
 RC_START EQU _RAM + $0FFF
@@ -292,10 +293,10 @@ SECTION "MainLoop",CODE[$4000]
 	; Extract ROM if Start pressed and there's a cart in
 	ld a, [VAR_CART_IN]
 	cp TRUE
-	jr nz, .endExtract
+	jr nz, .noExtract
 	ld a, [VAR_JOY_CHAR]
 	cp $53 ; ascii S
-	jr nz, .endExtract
+	jr nz, .noExtract
 	; Draw the dumping dump status line
 	ld hl, RC_DUMP_STATUS_LINES + SCRN_X_B * 2
 	ld de, BG_POS_DUMP_STATUS
@@ -310,13 +311,28 @@ SECTION "MainLoop",CODE[$4000]
 	jr	nz, .dsdLoop
 	dec	b
 	jr	nz, .dsdLoop
-	; Start extract routine
+	; Start extract routine (ROM-only currently)
+	ld a, 0
+	ld [VAR_CURRENT_BANK], a ; zero the current bank
 	ld hl, $0000 ; start at the beginning...
 	ld bc, $8000 ; end of both ROM banks (okay for cart type 0)
 	inc	b
 	inc	c
 	jr	.exSkip
-.exLoop	ld a,[hl+]
+.transmitLoop:
+	;; Increase bank number whenever it's at $4000 (start of bank 1)
+	ld a, h ; Test high byte
+	cp $40
+	jr nz, .endBankNoIncr
+	ld a, l ; Test low byte
+	cp $00
+	jr nz, .endBankNoIncr
+	ld a, [VAR_CURRENT_BANK] ; If HL=$4000 then increment the bank counter
+	inc a
+	ld [VAR_CURRENT_BANK], a
+.endBankNoIncr
+	;; Send byte via serial
+  ld a,[hl+]
 	ld	[rSB], a ; Put byte in serial buffer
 	ld a, 0
 	ld [VAR_TX_TIMER], a ; zero the tx timer
@@ -341,10 +357,10 @@ SECTION "MainLoop",CODE[$4000]
 	cp $ff
 	jr nz, .postTxPause ; if timer != $ff, recheck the tx flag
 .exSkip	dec	c
-	jr	nz, .exLoop
+	jr	nz, .transmitLoop
 	dec	b
-	jr	nz, .exLoop
-.endExtract:
+	jr	nz, .transmitLoop
+.noExtract:
 
 
 
