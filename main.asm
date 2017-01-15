@@ -1,8 +1,5 @@
 INCLUDE "gbhw.inc"
-INCLUDE "ibmpc1.inc"
-INCLUDE "hex-chars.inc"
-INCLUDE "tile-designer\\LoadingBar.inc"
-INCLUDE "tile-designer\\LoadingBar.z80"
+INCLUDE "tiles.inc"
 INCLUDE "moved-address-fix\\moved-address-fix.asm"
 
 
@@ -57,11 +54,6 @@ SECTION "Org $100",HOME[$100]
 
   INCLUDE "memory.asm"
 
-TileData:
-	chr_IBMPC1      1,8
-HexTiles:
-	chr_HEXCHARS
-
 begin:
 	di
 	ld	sp, $ffff ; init stack pointer
@@ -81,21 +73,25 @@ begin:
 	call	mem_Set
 
 	;; VRAM loads
-	; load default tiles to vram
-	ld   	hl, TileData
+	; load font to vram
+	ld   	hl, IBMPC1_1
 	ld 		de, _VRAM
-	ld		bc, 8*256        ; length (8 bytes per tile) x (256 tiles)
-	call	mem_CopyMono    ; Copy tile data to memory
+	ld		bc, 16*IBMPC1_1Len
+	call	mem_Copy
+	ld   	hl, IBMPC1_2
+	ld 		de, _VRAM + 16*IBMPC1_1Len
+	ld		bc, 16*IBMPC1_2Len
+	call	mem_Copy
 	; load hex-chars tiles to vram
-	ld   	hl, HexTiles
+	ld   	hl, HexChars
 	ld 		de, _VRAM + $0f00
-	ld		bc, 8*16        ; length (8 bytes per tile) x (16 tiles)
-	call	mem_CopyMono    ; Copy tile data to memory
+	ld		bc, 16*HexCharsLen
+	call	mem_Copy
 	; load the loading bar tiles to vram
 	ld   	hl, LoadingBar
 	ld 		de, $8e00
-	ld		bc, 16*LoadingBarLen        ; length (16 bytes per tile) x (16 tiles)
-	call	mem_Copy    ; Copy tile data to memory
+	ld		bc, 16*LoadingBarLen
+	call	mem_Copy
 
 	;; Clear the background
 	ld   	a, $20 ; $20 = blank tile
