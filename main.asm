@@ -3,6 +3,7 @@ INCLUDE "ibmpc1.inc"
 INCLUDE "hex-chars.inc"
 INCLUDE "tile-designer\\LoadingBar.inc"
 INCLUDE "tile-designer\\LoadingBar.z80"
+INCLUDE "moved-address-fix\\moved-address-fix.asm"
 
 
 ; VRAM Offsets
@@ -125,6 +126,11 @@ begin:
 	ld      de, _RAM
 	ld      bc, $0FFF ; max size of inbuilt RAM (TODO - Find out length of code and copy to that...)
 	call    mem_Copy
+	; Fix jump/call addresses in RAM
+	ld      hl, _RAM 	; pCodeStart
+	ld      de, $8000 ; pOffset
+	ld      bc, $0FFF ; pCodeLengthBytes
+	call		updateMovedAddresses
 	; Copy Nintendo logo to RAM (to compare and check carts are in)
 	ld      hl, CART_NINTY_LOGO
 	ld      de, RC_NINTY_LOGO
@@ -188,13 +194,10 @@ DumpStatusLines:
 	DB "   Dump complete!   "
 	DB "   No link cable?   "
 
-
-
-
-
-SECTION "MainLoop",CODE[$4000]
+SECTION "Code for RAM",CODE[$4000]
 	nop
 .mainLoop:
+	nop
 		; Loop until vblank status flag is set
 .vblankWait:
 		ld a, [rSTAT]
@@ -211,6 +214,52 @@ SECTION "MainLoop",CODE[$4000]
 	cp TRUE
 	jr nz, .noCartDraw
 	; If cart inserted, draw cart title
+	call DrawCartTitle
+	jr .cartTitleEnd
+.noCartDraw:
+	; Draw the no-cart title
+	call DrawNoCartTitle
+.cartTitleEnd:
+
+	; Draw some debug info
+	call DrawDebug
+
+	; Extract ROM if Start pressed and there's a cart in
+	ld a, [VAR_CART_IN]
+	cp TRUE
+	jr nz, .noExtract
+	ld a, [VAR_JOY_CHAR]
+	cp $53 ; ascii S
+	jr nz, .noExtract
+	call ExtractROM
+.noExtract:
+
+	; Read joypad
+	call ReadJoypad
+
+	; Test if a valid cart is attached
+	call ValidCartTest
+
+	jp .mainLoop
+
+;;;; Functions
+DrawDebug::
+	; Draw joypad char
+	ld a, [VAR_JOY_CHAR]
+	ld [$9A20], a
+	; Draw SB
+	ld a, [rSB]
+	and $0f
+	add VRO_HEX_CHAR
+	ld [$9A33], a ; low nibble
+	ld a, [rSB]
+	swap a
+	and $0f
+	add VRO_HEX_CHAR
+	ld [$9A32], a ; high nibble
+	ret
+
+DrawCartTitle::
 	ld hl, CART_TITLE ; Cart title location in rom
 	ld de, BG_POS_CART_TITLE
 	ld bc, CART_TITLE_LEN
@@ -241,9 +290,9 @@ SECTION "MainLoop",CODE[$4000]
 	jr	nz, .dsrLoop
 	dec	b
 	jr	nz, .dsrLoop
-	jr .cartTitleEnd
-.noCartDraw:
-	; Draw the no-cart title
+	ret
+
+DrawNoCartTitle::
 	ld hl, RC_NO_CART_STR
 	ld de, BG_POS_CART_TITLE
 	ld bc, CART_TITLE_LEN
@@ -258,6 +307,7 @@ SECTION "MainLoop",CODE[$4000]
 	dec	b
 	jr	nz, .nctLoop
 	; Draw the insert-cart dump status line
+	;; TODO - generify the status-line code into its own function
 	ld hl, RC_DUMP_STATUS_LINES + SCRN_X_B * 0
 	ld de, BG_POS_DUMP_STATUS
 	ld bc, SCRN_X_B
@@ -271,33 +321,102 @@ SECTION "MainLoop",CODE[$4000]
 	jr	nz, .dsicLoop
 	dec	b
 	jr	nz, .dsicLoop
-.cartTitleEnd:
+	ret
 
-;; DEBUG DRAWING
-	; Draw joypad char
-	ld a, [VAR_JOY_CHAR]
-	ld [$9A20], a
-	; Draw SB
-	ld a, [rSB]
-	and $0f
-	add VRO_HEX_CHAR
-	ld [$9A33], a ; low nibble
-	ld a, [rSB]
-	swap a
-	and $0f
-	add VRO_HEX_CHAR
-	ld [$9A32], a ; high nibble
-;; DEBUG DRAWING
+ValidCartTest::
+	ld a, FALSE
+	ld [VAR_CART_IN], a ; Default to FALSE
+	LD HL, CART_NINTY_LOGO	; Compare cartridge Nintendo logo
+	LD DE, RC_NINTY_LOGO		; To the one copied into ram at the start
+.logoCmpLoop:
+	LD A,[DE] ; a = RC_NINTY_LOGO[de]
+	INC DE		; de++
+	CP [HL]		; a == CART_NINTY_LOGO[hl]
+	JR NZ, .endLogoCmpLoop ; if not a match, break out leaving cart_in=false
+	INC HL		; hl++
+	LD A, L		;
+	CP $34		; Loop until L = $34 (meaning HL=$0134, 48 bytes after CART_TITLE($0104))
+	JR NZ, .logoCmpLoop
+.validCart:
+	ld a, TRUE
+	ld [VAR_CART_IN], a
+.endLogoCmpLoop:
+	ret
 
+ReadJoypad::
+.ReadJoypad:
+	LD A,$20       ;<- bit 5 = $20
+	LD [$FF00],A   ;<- select P14 by setting it low
+	LD A,[$FF00]   ;
+	LD A,[$FF00]   ;<- wait a few cycles
+	CPL            ;<- complement A
+	AND $0F        ;<- get only first 4 bits
+	SWAP A         ;<- swap it
+	LD B,A         ;<- store A in B
+	LD A,$10       ;
+	LD [$FF00],A   ;<- select P15 by setting it low
+	LD A,[$FF00]   ;
+	LD A,[$FF00]   ;
+	LD A,[$FF00]   ;
+	LD A,[$FF00]   ;
+	LD A,[$FF00]   ;
+	LD A,[$FF00]   ;<- Wait a few MORE cycles
+	CPL            ;<- complement (invert)
+	AND $0F        ;<- get first 4 bits
+	OR B           ;<- put A and B together
+								 ;
+	LD B,A         ;<- store A in D
+	LD A,[$FF8B]   ;<- read old joy data from ram
+	XOR B          ;<- toggle w/current button bit
+	AND B          ;<- get current button bit back
+	LD [$FF8C],A   ;<- save in new Joydata storage
+	LD A,B         ;<- put original value in A
+	LD [$FF8B],A   ;<- store it as old joy data
+								 ;
+	LD A,$30       ;<- deselect P14 and P15
+	LD [$FF00],A   ;<- RESET Joypad
+	; Test joypad and put ascii char in b
+	ld b, $db ; ascii black tile
+	ld a, [$FF8B]
+.start:
+	bit PADB_START, a
+	jr z, .select
+	ld b, $53
+.select:
+	bit PADB_SELECT, a
+	jr z, .btnB
+	ld b, $73
+.btnB:
+	bit PADB_B, a
+	jr z, .btnA
+	ld b, $62
+.btnA:
+	bit PADB_A, a
+	jr z, .down
+	ld b, $61
+.down:
+	bit PADB_DOWN, a
+	jr z, .up
+	ld b, $19
+.up:
+	bit PADB_UP, a
+	jr z, .left
+	ld b, $18
+.left:
+	bit PADB_LEFT, a
+	jr z, .right
+	ld b, $1b
+.right:
+	bit PADB_RIGHT, a
+	jr z, .joyOut
+	ld b, $1a
+.joyOut:
+	ld a, b
+	ld [VAR_JOY_CHAR], a
+	ret
 
-	; Extract ROM if Start pressed and there's a cart in
-	ld a, [VAR_CART_IN]
-	cp TRUE
-	jr nz, .noExtract
-	ld a, [VAR_JOY_CHAR]
-	cp $53 ; ascii S
-	jr nz, .noExtract
-	; Draw the dumping dump status line
+ExtractROM::
+; Draw the dumping dump status line
 	ld hl, RC_DUMP_STATUS_LINES + SCRN_X_B * 2
 	ld de, BG_POS_DUMP_STATUS
 	ld bc, SCRN_X_B
@@ -360,103 +479,7 @@ SECTION "MainLoop",CODE[$4000]
 	jr	nz, .transmitLoop
 	dec	b
 	jr	nz, .transmitLoop
-.noExtract:
-
-
-
-
-.ReadJoypad:
-	LD A,$20       ;<- bit 5 = $20
-	LD [$FF00],A   ;<- select P14 by setting it low
-	LD A,[$FF00]   ;
-	LD A,[$FF00]   ;<- wait a few cycles
-	CPL            ;<- complement A
-	AND $0F        ;<- get only first 4 bits
-	SWAP A         ;<- swap it
-	LD B,A         ;<- store A in B
-	LD A,$10       ;
-	LD [$FF00],A   ;<- select P15 by setting it low
-	LD A,[$FF00]   ;
-	LD A,[$FF00]   ;
-	LD A,[$FF00]   ;
-	LD A,[$FF00]   ;
-	LD A,[$FF00]   ;
-	LD A,[$FF00]   ;<- Wait a few MORE cycles
-	CPL            ;<- complement (invert)
-	AND $0F        ;<- get first 4 bits
-	OR B           ;<- put A and B together
-								 ;
-	LD B,A         ;<- store A in D
-	LD A,[$FF8B]   ;<- read old joy data from ram
-	XOR B          ;<- toggle w/current button bit
-	AND B          ;<- get current button bit back
-	LD [$FF8C],A   ;<- save in new Joydata storage
-	LD A,B         ;<- put original value in A
-	LD [$FF8B],A   ;<- store it as old joy data
-								 ;
-	LD A,$30       ;<- deselect P14 and P15
-	LD [$FF00],A   ;<- RESET Joypad
-	; Test joypad and put ascii char in b
-	ld b, $db
-	ld a, [$FF8B]
-.start:
-	bit PADB_START, a
-	jr z, .select
-	ld b, $53
-.select:
-	bit PADB_SELECT, a
-	jr z, .btnB
-	ld b, $73
-.btnB:
-	bit PADB_B, a
-	jr z, .btnA
-	ld b, $62
-.btnA:
-	bit PADB_A, a
-	jr z, .down
-	ld b, $61
-.down:
-	bit PADB_DOWN, a
-	jr z, .up
-	ld b, $19
-.up:
-	bit PADB_UP, a
-	jr z, .left
-	ld b, $18
-.left:
-	bit PADB_LEFT, a
-	jr z, .right
-	ld b, $1b
-.right:
-	bit PADB_RIGHT, a
-	jr z, .joyOut
-	ld b, $1a
-.joyOut:
-	ld a, b
-	ld [VAR_JOY_CHAR], a
-
-
-;; Test if a valid cart is attached
-	ld a, FALSE
-	ld [VAR_CART_IN], a ; Default to FALSE
-	LD HL, CART_NINTY_LOGO	; Compare cartridge Nintendo logo
-	LD DE, RC_NINTY_LOGO		; To the one copied into ram at the start
-.logoCmpLoop:
-	LD A,[DE] ; a = RC_NINTY_LOGO[de]
-	INC DE		; de++
-	CP [HL]		; a == CART_NINTY_LOGO[hl]
-	JR NZ, .endLogoCmpLoop ; if not a match, break out leaving cart_in=false
-	INC HL		; hl++
-	LD A, L		;
-	CP $34		; Loop until L = $34 (meaning HL=$0134, 48 bytes after CART_TITLE($0104))
-	JR NZ, .logoCmpLoop
-.validCart:
-	ld a, TRUE
-	ld [VAR_CART_IN], a
-.endLogoCmpLoop:
-
-
-	jp _RAM
+	ret
 
 	; code-end identifier
 	DB $DE,$AD,$DE,$AD

@@ -14,7 +14,7 @@ Currently tested using an EMS 64M flashcart and both a Gameboy pocket and Gamebo
   - [x] Test it works on real hardware
 - [x] Copy code to RAM and test running from there works in an emulator
   - [x] Test it works on real hardware
-  - [ ] Modify the code-copy-to-RAM function to re-write any fixed jumps & calls to point to the new location (then I can make calls and stop inlining everything)
+  - [x] Add function to fix JUMP and CALL commands once code is moved to RAM
 - [x] Read and display [the title](http://gbdev.gg8.se/wiki/articles/The_Cartridge_Header#0134-0143_-_Title) from the cartridge header
 - [x] Test swapping cartridges works on real hardware
 - [x] Test for the Nintendo logo like the boot ROM does to see if a valid cart is plugged in
