@@ -1,10 +1,5 @@
 INCLUDE "moved-address-fix\\opcode-length-LUT.asm"
 
-; jp nn				: 11 000 011 : 0xC3
-; jp cc, nn		: 11 0cc 010 : 0xE7(mask) & 0xC2
-; call nn			: 11 001 101 : 0xCD
-; call cc, nn	: 11 0cc 100 : 0xE7(mask) & 0xC4
-
 ;***************************************************************************
 ;*
 ;* updateMovedAddresses - Walk through bytecount bytes from pDest and update
@@ -17,44 +12,31 @@ INCLUDE "moved-address-fix\\opcode-length-LUT.asm"
 ;*
 ;***************************************************************************
 updateMovedAddresses::
-	nop 
-	nop
-	nop
-
 	ld a, 1
 	inc	b
 	inc	c
 	jr	.jumpStart
 .loop	ld	a, [hl] ; a = opcode
+	;; Test opcode for fixing
 	push de
-	push hl
-		;; Look up opcode length
-		ld hl, OpcodeLengthLUT
-		ld d, 0
-		ld e, a ; de = 16bit a
-		add hl, de ; &LUT + a
-		ld e, [hl] ; e = *LUT (op length)
-	pop hl
-	;; Test it for fixing
 	cp $C3 ; a == jp nn ?
 	jr z, .fixAddress
 	cp $CD ; a == call nn ?
 	jr z, .fixAddress
-	ld d, a ; backup a
+	ld d, a ; backup a into d
 	and %11100111 ; Mask for all non-cc bits
 	cp $C2 ; a == jp cc nn ?
 	jr z, .fixAddress
-	ld a, d ; restore a
+	ld a, d ; restore a from d
 	and %11100111 ; Mask for all non-cc bits
 	cp $C4 ; a == call cc nn ?
 	jr z, .fixAddress
-	ld a, e ; a = *LUT (op length)
-	pop de ; restore de back to pOffset
+	pop de
 	jr .skipOverParams
+
 .fixAddress:
-	ld a, e ; a = *LUT (op length)
-	pop de ; restore de back to pOffset
-	; Add de to next two bytes
+	pop de ; This remained on the stack as we jumped here from the opcode test, fix?
+	; Add pOffset to next two bytes (least significant byte first)
 	push af
 	push hl
 		inc hl ; Skip past the opcode
@@ -69,14 +51,26 @@ updateMovedAddresses::
 		ld [hl], a
 	pop hl
 	pop af
+
 .skipOverParams:
-	inc hl
+	push de
+	push hl
+		;; Look up opcode length
+		ld hl, OpcodeLengthLUT
+		ld d, 0
+		ld e, a ; de = padded opcode
+		add hl, de ; &LUT + opcode
+		ld a, [hl] ; e = *LUT (op length)
+	pop hl
+	pop de ; restore de back to pOffset
+
+.paramLoop	inc hl
 .jumpStart: 	dec c
 	jr nz, .nextParam
 	dec b
 	jr nz, .nextParam
 	jr .end
 .nextParam: dec a
-	jr nz, .skipOverParams
+	jr nz, .paramLoop
 	jr .loop
 .end:	ret

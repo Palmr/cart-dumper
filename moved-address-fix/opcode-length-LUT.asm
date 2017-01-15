@@ -1,5 +1,6 @@
 SECTION "LUT", HOME
 
+; Look Up Table with length of opcodes (number of bytes for the opcode and any parameters it requires)
 OpcodeLengthLUT:
 DB 1,3,1,1,1,1,2,1,3,1,1,1,1,1,2,1
 DB 2,3,1,1,1,1,2,1,2,1,1,1,1,1,2,1
