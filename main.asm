@@ -48,32 +48,35 @@ RC_DUMP_STATUS_LINES EQU RC_NO_CART_STR - RC_DUMP_STATUS_LINES_LEN
 
 SECTION "Org $100",HOME[$100]
 	nop
-	jp	begin
+	jp	initialise
 
   ROM_HEADER "CART DUMPER  NP", ROM_NOMBC, ROM_SIZE_32KBYTE, RAM_SIZE_0KBYTE
 
+	; Include GABY Memory Manipulation Code
   INCLUDE "memory.asm"
 
-begin:
+initialise:
 	di
 	ld	sp, $ffff ; init stack pointer
+
+	; turn the display off
 	call StopLCD
 
 	ld	a, $e4
-	ld	[rBGP], a ; background palette
+	ld	[rBGP], a ; set background palette
 
 	ld  a, 0 ; init scroll registers
 	ld  [rSCX], a
 	ld  [rSCY], a
 
-	; Zero out HRAM (where I store  vars)
+	; Zero out HRAM (where I store vars)
 	ld   	a, 0
 	ld   	hl, _HRAM
-	ld  	bc, VAR_COUNT ; amount of vars
+	ld  	bc, VAR_COUNT
 	call	mem_Set
 
 	;; VRAM loads
-	; load font to vram
+	; load font to vram (Comes in two tile sets)
 	ld   	hl, IBMPC1_1
 	ld 		de, _VRAM
 	ld		bc, 16*IBMPC1_1Len
@@ -99,7 +102,7 @@ begin:
 	ld  	bc, SCRN_VX_B * SCRN_VY_B
 	call	mem_Set
 
-	;; Initialise background tiles
+	;; Initialise background map
 	; Draw ROM title
 	ld      hl, RomTitle
 	ld      de, _SCRN0
@@ -120,7 +123,7 @@ begin:
 	; Copy mainloop to RAM
 	ld      hl, $4000
 	ld      de, _RAM
-	ld      bc, $0FFF ; max size of inbuilt RAM (TODO - Find out length of code and copy to that...)
+	ld      bc, $0FFF ; Hopefully bigger than the compiled size of my code...
 	call    mem_Copy
 	; Fix jump/call addresses in RAM
 	ld      hl, _RAM 	; pCodeStart
@@ -143,7 +146,6 @@ begin:
 	ld      bc, RC_DUMP_STATUS_LINES_LEN
 	call    mem_Copy
 
-
 	;; Turn screen on
 	ld      a,LCDCF_ON|LCDCF_BG8000|LCDCF_BG9800|LCDCF_BGON|LCDCF_OBJ16|LCDCF_OBJOFF
 	ld      [rLCDC],a
@@ -151,21 +153,22 @@ begin:
 	;; jump to copied code in ram
 	jp _RAM
 
+;; Functions in ROM
 ; *** Turn off the LCD display ***
 StopLCD:
-        ld      a,[rLCDC]
-        rlca                    ; Put the high bit of LCDC into the Carry flag
-        ret     nc              ; Screen is off already. Exit.
+	ld      a,[rLCDC]
+	rlca                    ; Put the high bit of LCDC into the Carry flag
+	ret     nc              ; Screen is off already. Exit.
 ; Loop until we are in VBlank
 .stopWait:
-        ld      a,[rLY]
-        cp      145             ; Is display on scan line 145 yet?
-        jr      nz, .stopWait        ; no, keep waiting
-; Turn off the LCD
-        ld      a,[rLCDC]
-        res     7,a             ; Reset bit 7 of LCDC
-        ld      [rLCDC],a
-        ret
+	ld      a,[rLY]
+	cp      145             ; Is display on scan line 145 yet?
+	jr      nz, .stopWait        ; no, keep waiting
+	; Turn off the LCD
+	ld      a,[rLCDC]
+	res     7,a             ; Reset bit 7 of LCDC
+	ld      [rLCDC],a
+	ret
 
 ;; Data only needed when loading
 RomTitle:
@@ -175,10 +178,9 @@ RomTitle:
 CartPrompt:
 	DB "Cartridge:"
 EmptyLoadingBar:
-	DB TILE_LOADING_START, TILE_LOADING_EMPTY, TILE_LOADING_EMPTY, TILE_LOADING_EMPTY, TILE_LOADING_EMPTY
-	DB TILE_LOADING_EMPTY, TILE_LOADING_EMPTY, TILE_LOADING_EMPTY, TILE_LOADING_EMPTY, TILE_LOADING_EMPTY
-	DB TILE_LOADING_EMPTY, TILE_LOADING_EMPTY, TILE_LOADING_EMPTY, TILE_LOADING_EMPTY, TILE_LOADING_EMPTY
-	DB TILE_LOADING_EMPTY, TILE_LOADING_EMPTY, TILE_LOADING_END
+	DB TILE_LOADING_START, TILE_LOADING_EMPTY, TILE_LOADING_EMPTY, TILE_LOADING_EMPTY, TILE_LOADING_EMPTY, TILE_LOADING_EMPTY
+	DB TILE_LOADING_EMPTY, TILE_LOADING_EMPTY, TILE_LOADING_EMPTY, TILE_LOADING_EMPTY, TILE_LOADING_EMPTY, TILE_LOADING_EMPTY
+	DB TILE_LOADING_EMPTY, TILE_LOADING_EMPTY, TILE_LOADING_EMPTY, TILE_LOADING_EMPTY, TILE_LOADING_EMPTY, TILE_LOADING_END
 
 ;; Data that will be copied to the top end of RAM
 NoCart:
@@ -190,16 +192,19 @@ DumpStatusLines:
 	DB "   Dump complete!   "
 	DB "   No link cable?   "
 
+
+
+
 SECTION "Code for RAM",CODE[$4000]
 	nop
 .mainLoop:
 	nop
-		; Loop until vblank status flag is set
+	; Loop until vblank status flag is set
 .vblankWait:
-		ld a, [rSTAT]
-		and $03
-		cp STATF_VB
-		jr nz, .vblankWait
+	ld a, [rSTAT]
+	and $03
+	cp STATF_VB
+	jr nz, .vblankWait
 
 .VRAMStuff:
 	lcd_WaitVRAM
@@ -220,14 +225,15 @@ SECTION "Code for RAM",CODE[$4000]
 	; Draw some debug info
 	call DrawDebug
 
-	; Extract ROM if Start pressed and there's a cart in
+;; ROM Extraction
 	ld a, [VAR_CART_IN]
 	cp TRUE
 	jr nz, .noExtract
 	ld a, [VAR_JOY_CHAR]
 	cp $53 ; ascii S
 	jr nz, .noExtract
-	call ExtractROM
+	; Extract ROM if Start pressed and there's a cart in
+	call DumpRomViaSerial
 .noExtract:
 
 	; Read joypad
@@ -238,7 +244,8 @@ SECTION "Code for RAM",CODE[$4000]
 
 	jp .mainLoop
 
-;;;; Functions
+;; Functions for RAM
+; *** All debug display code ***
 DrawDebug::
 	; Draw joypad char
 	ld a, [VAR_JOY_CHAR]
@@ -255,6 +262,7 @@ DrawDebug::
 	ld [$9A32], a ; high nibble
 	ret
 
+; *** Draw the cartridge title ***
 DrawCartTitle::
 	ld hl, CART_TITLE ; Cart title location in rom
 	ld de, BG_POS_CART_TITLE
@@ -273,21 +281,11 @@ DrawCartTitle::
 	dec	b
 	jr	nz, .cartTitleLoop
 	; Draw the ready dump status line
-	ld hl, RC_DUMP_STATUS_LINES + SCRN_X_B * 1
-	ld de, BG_POS_DUMP_STATUS
-	ld bc, SCRN_X_B
-	inc	b
-	inc	c
-	jr	.dsrSkip
-.dsrLoop	ld	a,[hl+]
-	ld	[de],a
-	inc	de
-.dsrSkip	dec	c
-	jr	nz, .dsrLoop
-	dec	b
-	jr	nz, .dsrLoop
+	ld a, 1
+	call SetDumpStatusLine
 	ret
 
+; *** Draw the no-cart string as the cartridge title ***
 DrawNoCartTitle::
 	ld hl, RC_NO_CART_STR
 	ld de, BG_POS_CART_TITLE
@@ -303,22 +301,40 @@ DrawNoCartTitle::
 	dec	b
 	jr	nz, .nctLoop
 	; Draw the insert-cart dump status line
-	;; TODO - generify the status-line code into its own function
-	ld hl, RC_DUMP_STATUS_LINES + SCRN_X_B * 0
-	ld de, BG_POS_DUMP_STATUS
-	ld bc, SCRN_X_B
-	inc	b
-	inc	c
-	jr	.dsicSkip
-.dsicLoop	ld	a,[hl+]
-	ld	[de],a
-	inc	de
-.dsicSkip	dec	c
-	jr	nz, .dsicLoop
-	dec	b
-	jr	nz, .dsicLoop
+	ld a, 0
+	call SetDumpStatusLine
 	ret
 
+; *** Set the dump status line using a as the index ***
+SetDumpStatusLine::
+	ld hl, RC_DUMP_STATUS_LINES
+	; Add line offset
+	; a*20
+	add a,a
+	add a,a
+	ld b,a
+	add a,a
+	add a,a
+	add a,b
+	; make a 16bit a
+	ld b, 0
+	ld c, a
+	add hl, bc ; do offset
+	ld de, BG_POS_DUMP_STATUS ; Set position of the line
+	ld bc, SCRN_X_B ; Amount of data to copy (line length)
+	inc	b
+	inc	c
+	jr	.jumpStart
+.loop	ld	a, [hl+]
+	ld	[de], a
+	inc	de
+.jumpStart	dec	c
+	jr	nz, .loop
+	dec	b
+	jr	nz, .loop
+	ret
+
+; *** Check if a valid cartridge is inserted, if so, set VAR_CART_IN = TRUE ***
 ValidCartTest::
 	ld a, FALSE
 	ld [VAR_CART_IN], a ; Default to FALSE
@@ -339,8 +355,8 @@ ValidCartTest::
 .endLogoCmpLoop:
 	ret
 
+; *** Read the joypad value and store as ASCII in VAR_JOY_CHAR ***
 ReadJoypad::
-.ReadJoypad:
 	LD A,$20       ;<- bit 5 = $20
 	LD [$FF00],A   ;<- select P14 by setting it low
 	LD A,[$FF00]   ;
@@ -411,21 +427,11 @@ ReadJoypad::
 	ld [VAR_JOY_CHAR], a
 	ret
 
-ExtractROM::
-; Draw the dumping dump status line
-	ld hl, RC_DUMP_STATUS_LINES + SCRN_X_B * 2
-	ld de, BG_POS_DUMP_STATUS
-	ld bc, SCRN_X_B
-	inc	b
-	inc	c
-	jr	.dsdSkip
-.dsdLoop	ld	a,[hl+]
-	ld	[de],a
-	inc	de
-.dsdSkip	dec	c
-	jr	nz, .dsdLoop
-	dec	b
-	jr	nz, .dsdLoop
+; *** Dump the contents of the cartridge via the serial port ***
+DumpRomViaSerial::
+	; Draw the dumping dump status line
+	ld a, 2
+	call SetDumpStatusLine
 	; Start extract routine (ROM-only currently)
 	ld a, 0
 	ld [VAR_CURRENT_BANK], a ; zero the current bank
