@@ -11,7 +11,7 @@ TILE_LOADING_START EQU $E0
 TILE_LOADING_END EQU $E2
 TILE_LOADING_EMPTY EQU $E1
 TILE_LOADING_PARTIAL EQU $E3
-TILE_LOADING_FELL EQU $E4
+TILE_LOADING_FULL EQU $E4
 
 ; Background positions
 BG_POS_CART_PROMPT EQU _SCRN0 + 1 + (SCRN_VY_B * 3)
@@ -34,7 +34,8 @@ VAR_JOY_CHAR EQU _HRAM
 VAR_CART_IN EQU _HRAM+1
 VAR_TX_TIMER EQU _HRAM+2
 VAR_CURRENT_BANK EQU _HRAM+3
-VAR_COUNT EQU 4
+VAR_DUMP_PROGRESS EQU _HRAM+4
+VAR_COUNT EQU 5
 
 ; RAM CONST locations (don't shuffle the lines below)
 RC_START EQU _RAM + $0FFF
@@ -439,19 +440,10 @@ DumpRomViaSerial::
 	ld bc, $8000 ; end of both ROM banks (okay for cart type 0)
 	inc	b
 	inc	c
-	jr	.exSkip
-.transmitLoop:
-	;; Increase bank number whenever it's at $4000 (start of bank 1)
-	ld a, h ; Test high byte
-	cp $40
-	jr nz, .endBankNoIncr
-	ld a, l ; Test low byte
-	cp $00
-	jr nz, .endBankNoIncr
-	ld a, [VAR_CURRENT_BANK] ; If HL=$4000 then increment the bank counter
-	inc a
-	ld [VAR_CURRENT_BANK], a
-.endBankNoIncr
+	jr	.txJumpStart
+.txLoop:
+	call DrawProgress
+	call DebugExtractAddress
 	;; Send byte via serial
   ld a,[hl+]
 	ld	[rSB], a ; Put byte in serial buffer
@@ -469,18 +461,124 @@ DumpRomViaSerial::
 	cp $ff
 	jr nz, .txCheck ; if timer != $ff, recheck the tx flag
 	; wait for transfer to end...
-.txDone	ld a, 0
+.txDone:
 	; pause a bit between bytes being transferred
- ld [VAR_TX_TIMER], a ; zero the tx timer
-.postTxPause:	ld a, [VAR_TX_TIMER] ; inc timer
+	call PostTransmitPause
+.txJumpStart	dec	c
+	jr	nz, .txLoop
+	dec	b
+	jr	nz, .txLoop
+	call ClearProgressBar
+	ret
+
+; *** Use HL to set update the progress ***
+DrawProgress::
+	call UpdateBankNumber
+
+	;; Increase VAR_DUMP_PROGRESS whenever hl % 0400 == 0 (every 1024 bytes, 16 times per bank)
+	ld a, l ; Test low byte
+	cp $00
+	jr nz, .endNoProgIncr
+	ld a, h ; Test high byte
+.loopSub sub $04
+	jr c, .endNoProgIncr ; h !% 4, so no incr
+	jr nz, .loopSub ; keep going
+.progInc ld a, [VAR_DUMP_PROGRESS]
+	inc a
+	ld [VAR_DUMP_PROGRESS], a
+.endNoProgIncr
+
+	;; Draw progress bar
+	push hl
+	push de
+		ld hl, BG_POS_LOADING_BAR
+		inc hl ; Skip the first tile
+		ld a, [VAR_DUMP_PROGRESS]
+		ld d, a
+		inc d
+		lcd_WaitVRAM ; wait for lcd
+		ld a, TILE_LOADING_FULL
+		jr .jumpStart
+.loop ld [hl+], a
+.jumpStart dec d
+		jr nz, .loop
+	pop de
+	pop hl
+
+	ret
+
+; *** Use HL to set the current bank number ***
+UpdateBankNumber::
+	;; Increase bank number whenever hl at $4000 (start of bank 1)
+	ld a, h ; Test high byte
+	cp $40
+	jr nz, .endBankNoIncr
+	ld a, l ; Test low byte
+	cp $00
+	jr nz, .endBankNoIncr
+	ld a, [VAR_CURRENT_BANK] ; If HL=$4000 then increment the bank counter
+	inc a
+	ld [VAR_CURRENT_BANK], a
+	call ClearProgressBar
+.endBankNoIncr
+	ret
+
+; *** Reset the progress bar ***
+ClearProgressBar::
+	ld a, 0
+	ld [VAR_DUMP_PROGRESS], a
+	push hl
+	push de
+		ld hl, BG_POS_LOADING_BAR
+		inc hl ; Skip the first tile
+		ld d, 16
+.loop:
+		lcd_WaitVRAM ; wait for lcd
+		ld a, TILE_LOADING_EMPTY
+		ld [hl+], a
+		dec d
+		jr nz, .loop
+	pop de
+	pop hl
+	ret
+
+; *** Use HL to set the current bank number ***
+DebugExtractAddress::
+	ld a,[rSTAT]
+	and STATF_BUSY
+	ret nz ; return straight away if screen is busy
+	; Draw hl
+	; H
+	ld a, h
+	and $0f
+	add VRO_HEX_CHAR
+	ld [$9a2e], a ; low nibble
+	ld a, h
+	swap a
+	and $0f
+	add VRO_HEX_CHAR
+	ld [$9a2d], a ; high nibble
+	; L
+	ld a, l
+	and $0f
+	add VRO_HEX_CHAR
+	ld [$9a30], a ; low nibble
+	ld a, l
+	swap a
+	and $0f
+	add VRO_HEX_CHAR
+	ld [$9a2f], a ; high nibble
+	ret
+
+; *** Pause by looping a few times ***
+PostTransmitPause::
+	ld a, 0
+  ld [VAR_TX_TIMER], a ; zero the tx timer
+.loop:	ld a, [VAR_TX_TIMER] ; inc timer
 	inc a ; inc timer
 	ld [VAR_TX_TIMER], a ; inc timer
-	cp $ff
-	jr nz, .postTxPause ; if timer != $ff, recheck the tx flag
-.exSkip	dec	c
-	jr	nz, .transmitLoop
-	dec	b
-	jr	nz, .transmitLoop
+	cp $7f ; Amount to loop
+	jr nz, .loop
 	ret
 
 	; code-end identifier

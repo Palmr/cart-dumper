@@ -34,10 +34,10 @@ Currently tested using an EMS 64M flashcart and both a Gameboy pocket and Gamebo
   - View hex on screen
   - QR Code (wildcard)
 - [ ] Add more of a menu instead of debug tiles
-  - Show more cart info
-  - Nice dump process bar
-  - Menu for dump methods
-  - Menu for what to dump
+  - [ ] Show more cart info
+  - [x] Nice dump process bar
+  - [ ] Menu for dump methods
+  - [ ] Menu for what to dump (rom/save)
   - Option to boot the cart that's plugged in
 
 ## To Build
