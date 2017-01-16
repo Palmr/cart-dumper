@@ -13,6 +13,10 @@ TILE_LOADING_EMPTY EQU $E1
 TILE_LOADING_PARTIAL EQU $E3
 TILE_LOADING_FULL EQU $E4
 
+; Cart MBC type consts
+MBC_INVALID EQU $FF
+MBC_UNSUPPORTED EQU $EF
+
 ; Background positions
 BG_POS_CART_PROMPT EQU _SCRN0 + 1 + (SCRN_VY_B * 3)
 BG_POS_CART_TITLE EQU _SCRN0 + 2 + (SCRN_VY_B * 5)
@@ -24,17 +28,21 @@ TRUE EQU 1
 FALSE EQU 0
 
 ; Cart header locations
+CART_NINTY_LOGO EQU $0104
+CART_NINTY_LOGO_LEN EQU $30
 CART_TITLE EQU $0134
 CART_TITLE_LEN EQU 15
-CART_NINTY_LOGO EQU $0104
-CART_NINTY_LOGO_LEN EQU CART_TITLE - CART_NINTY_LOGO
+CART_TYPE EQU $0147
+CART_ROM_SIZE EQU $0148
+CART_RAM_SIZE EQU $0149
 
 ; HRAM Variable locations
 VAR_CART_IN EQU _HRAM+0
 VAR_TX_TIMER EQU _HRAM+1
 VAR_CURRENT_BANK EQU _HRAM+2
 VAR_DUMP_PROGRESS EQU _HRAM+3
-VAR_COUNT EQU 4
+VAR_MBC EQU _HRAM+4
+VAR_COUNT EQU 5
 
 ; RAM CONST locations (don't shuffle the lines below)
 RC_START EQU _RAM + $0FFF
@@ -44,6 +52,8 @@ RC_NO_CART_STR_LEN EQU CART_TITLE_LEN
 RC_NO_CART_STR EQU RC_NINTY_LOGO - RC_NO_CART_STR_LEN
 RC_DUMP_STATUS_LINES_LEN EQU 20 * 5
 RC_DUMP_STATUS_LINES EQU RC_NO_CART_STR - RC_DUMP_STATUS_LINES_LEN
+RC_CART_MBC_TYPE_LUT_LEN EQU 35
+RC_CART_MBC_TYPE_LUT EQU RC_DUMP_STATUS_LINES - RC_CART_MBC_TYPE_LUT_LEN
 
 
 SECTION "Org $100",HOME[$100]
@@ -145,6 +155,11 @@ initialise:
 	ld      de, RC_DUMP_STATUS_LINES
 	ld      bc, RC_DUMP_STATUS_LINES_LEN
 	call    mem_Copy
+	; Copy MBC type LUT to RAM
+	ld      hl, CartMBCTypeLUT
+	ld      de, RC_CART_MBC_TYPE_LUT
+	ld      bc, RC_CART_MBC_TYPE_LUT_LEN
+	call    mem_Copy
 
 	;; Turn screen on
 	ld      a,LCDCF_ON|LCDCF_BG8000|LCDCF_BG9800|LCDCF_BGON|LCDCF_OBJ16|LCDCF_OBJOFF
@@ -191,7 +206,12 @@ DumpStatusLines:
 	DB "     Dumping...     "
 	DB "   Dump complete!   "
 	DB "   No link cable?   "
-
+CartMBCTypeLUT:
+	DB $00, $01, $01, $01, $FF, $02, $02, $FF
+	DB $00, $00, $FF, $EF, $EF, $EF, $FF, $03
+	DB $03, $03, $03, $03, $FF, $FF, $FF, $FF
+	DB $FF, $05, $05, $05, $05, $05, $05, $FF
+	DB $06, $FF, $07
 
 
 
@@ -227,6 +247,7 @@ SECTION "Code for RAM",CODE[$4000]
 
 	; Test if a valid cart is attached
 	call ValidCartTest
+	call ParseCartInfo
 
 ;; ROM Extraction
 	ld a, [VAR_CART_IN]
@@ -244,6 +265,23 @@ SECTION "Code for RAM",CODE[$4000]
 	jp .mainLoop
 
 ;; Functions for RAM
+; *** Parse info from the cart header ***
+ParseCartInfo::
+	; get the MBC type
+	ld a, [CART_TYPE]
+	cp $23
+	jr c, .knownCartType ; if carry, type < $23, can use LUT
+	ld a, MBC_UNSUPPORTED
+	jr .setMBCVar
+.knownCartType:
+	ld hl, RC_CART_MBC_TYPE_LUT
+	xor b
+	ld c, a
+	add hl, bc
+	ld a, [hl]
+.setMBCVar ld [VAR_MBC], a
+	ret
+
 ; *** All debug display code ***
 DrawDebug::
 	; Draw SB
