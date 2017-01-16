@@ -59,3 +59,18 @@ Alternatively, only need 2 bits per entry as none >3:
 ```
 
 This results in a 64 byte table but a more complex lookup routine (slower to run)
+
+To look up the length using the compressed table the code would be like (using pseudocode, assuming lengths are combined into bytes with lower opcodes as the higher bits in the byte):
+```
+// Mask off the two low bits of opcode and multiply by 2
+subIndex = (opcode & %00000011) << 1
+
+// Shift off the subIndex bits and only use the low 6 bits now
+tableIndex = (opcode >> 2) & %00111111
+
+// Look up a byte from the LUT using the tableIndex. This byte will contain the length for 4 opcodes
+lutValue = *(&LUT + tableIndex)
+
+// To get the length for this opcode we shift and mask out just the bits we want
+opcodeLength = (lutValue >> (6 - subIndex) & %00000011
+```
