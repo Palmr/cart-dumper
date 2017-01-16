@@ -30,12 +30,11 @@ CART_NINTY_LOGO EQU $0104
 CART_NINTY_LOGO_LEN EQU CART_TITLE - CART_NINTY_LOGO
 
 ; HRAM Variable locations
-VAR_JOY_CHAR EQU _HRAM
-VAR_CART_IN EQU _HRAM+1
-VAR_TX_TIMER EQU _HRAM+2
-VAR_CURRENT_BANK EQU _HRAM+3
-VAR_DUMP_PROGRESS EQU _HRAM+4
-VAR_COUNT EQU 5
+VAR_CART_IN EQU _HRAM+0
+VAR_TX_TIMER EQU _HRAM+1
+VAR_CURRENT_BANK EQU _HRAM+2
+VAR_DUMP_PROGRESS EQU _HRAM+3
+VAR_COUNT EQU 4
 
 ; RAM CONST locations (don't shuffle the lines below)
 RC_START EQU _RAM + $0FFF
@@ -226,31 +225,27 @@ SECTION "Code for RAM",CODE[$4000]
 	; Draw some debug info
 	call DrawDebug
 
+	; Test if a valid cart is attached
+	call ValidCartTest
+
 ;; ROM Extraction
 	ld a, [VAR_CART_IN]
 	cp TRUE
 	jr nz, .noExtract
-	ld a, [VAR_JOY_CHAR]
-	cp $53 ; ascii S
-	jr nz, .noExtract
-	; Extract ROM if Start pressed and there's a cart in
-	call DumpRomViaSerial
+	;; Extract ROM if Start pressed and there's a cart in
+	ld a, P1F_4
+	ld [rP1], a
+	ld a, [rP1]
+	ld a, [rP1]
+	and PADF_START
+	call z, DumpRomViaSerial
 .noExtract:
-
-	; Read joypad
-	call ReadJoypad
-
-	; Test if a valid cart is attached
-	call ValidCartTest
 
 	jp .mainLoop
 
 ;; Functions for RAM
 ; *** All debug display code ***
 DrawDebug::
-	; Draw joypad char
-	ld a, [VAR_JOY_CHAR]
-	ld [$9A20], a
 	; Draw SB
 	ld a, [rSB]
 	and $0f
@@ -326,7 +321,9 @@ SetDumpStatusLine::
 	inc	b
 	inc	c
 	jr	.jumpStart
-.loop	ld	a, [hl+]
+.loop:
+	lcd_WaitVRAM ; wait for lcd
+	ld	a, [hl+]
 	ld	[de], a
 	inc	de
 .jumpStart	dec	c
@@ -354,78 +351,6 @@ ValidCartTest::
 	ld a, TRUE
 	ld [VAR_CART_IN], a
 .endLogoCmpLoop:
-	ret
-
-; *** Read the joypad value and store as ASCII in VAR_JOY_CHAR ***
-ReadJoypad::
-	LD A,$20       ;<- bit 5 = $20
-	LD [$FF00],A   ;<- select P14 by setting it low
-	LD A,[$FF00]   ;
-	LD A,[$FF00]   ;<- wait a few cycles
-	CPL            ;<- complement A
-	AND $0F        ;<- get only first 4 bits
-	SWAP A         ;<- swap it
-	LD B,A         ;<- store A in B
-	LD A,$10       ;
-	LD [$FF00],A   ;<- select P15 by setting it low
-	LD A,[$FF00]   ;
-	LD A,[$FF00]   ;
-	LD A,[$FF00]   ;
-	LD A,[$FF00]   ;
-	LD A,[$FF00]   ;
-	LD A,[$FF00]   ;<- Wait a few MORE cycles
-	CPL            ;<- complement (invert)
-	AND $0F        ;<- get first 4 bits
-	OR B           ;<- put A and B together
-								 ;
-	LD B,A         ;<- store A in D
-	LD A,[$FF8B]   ;<- read old joy data from ram
-	XOR B          ;<- toggle w/current button bit
-	AND B          ;<- get current button bit back
-	LD [$FF8C],A   ;<- save in new Joydata storage
-	LD A,B         ;<- put original value in A
-	LD [$FF8B],A   ;<- store it as old joy data
-								 ;
-	LD A,$30       ;<- deselect P14 and P15
-	LD [$FF00],A   ;<- RESET Joypad
-	; Test joypad and put ascii char in b
-	ld b, $db ; ascii black tile
-	ld a, [$FF8B]
-.start:
-	bit PADB_START, a
-	jr z, .select
-	ld b, $53
-.select:
-	bit PADB_SELECT, a
-	jr z, .btnB
-	ld b, $73
-.btnB:
-	bit PADB_B, a
-	jr z, .btnA
-	ld b, $62
-.btnA:
-	bit PADB_A, a
-	jr z, .down
-	ld b, $61
-.down:
-	bit PADB_DOWN, a
-	jr z, .up
-	ld b, $19
-.up:
-	bit PADB_UP, a
-	jr z, .left
-	ld b, $18
-.left:
-	bit PADB_LEFT, a
-	jr z, .right
-	ld b, $1b
-.right:
-	bit PADB_RIGHT, a
-	jr z, .joyOut
-	ld b, $1a
-.joyOut:
-	ld a, b
-	ld [VAR_JOY_CHAR], a
 	ret
 
 ; *** Dump the contents of the cartridge via the serial port ***

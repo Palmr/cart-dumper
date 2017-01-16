@@ -19,7 +19,7 @@ Currently tested using an EMS 64M flashcart and both a Gameboy pocket and Gamebo
 - [x] Test swapping cartridges works on real hardware
 - [x] Test for the Nintendo logo like the boot ROM does to see if a valid cart is plugged in
 - [x] Read joypad data
-  - [ ] Read only what's needed when I need it
+  - [x] Read only what's needed when I need it
 - [x] Test serial connection works
 - [ ] Dump cartridge data over seial port when Start pressed
   - [x] Support basic 32K cartridge
