@@ -439,7 +439,7 @@ DumpRomViaSerial::
 	; Start extract routine (ROM-only currently)
 	ld hl, $0000 ; start at the beginning...
 .txLoop:
-	call DebugExtractAddress
+	call DebugExtract
 	;; Send byte via serial
   ld a,[hl+]
 	ld	[rSB], a ; Put byte in serial buffer
@@ -562,8 +562,8 @@ ClearProgressBar::
 	ret
 
 
-; *** Use HL to set the current bank number ***
-DebugExtractAddress::
+; *** Debug drawing during dumping ***
+DebugExtract::
 	ld a,[rSTAT]
 	and STATF_BUSY
 	ret nz ; return straight away if screen is busy
@@ -588,6 +588,32 @@ DebugExtractAddress::
 	and $0f
 	add VRO_HEX_CHAR
 	ld [$9a2f], a ; high nibble
+
+	; Draw Current Bank Number
+	ld a, [VAR_CURRENT_BANK]
+	and $0f
+	add VRO_HEX_CHAR
+	ld [$9a28], a ; low nibble
+	ld a, [VAR_CURRENT_BANK]
+	swap a
+	and $0f
+	add VRO_HEX_CHAR
+	ld [$9a27], a ; high nibble
+
+	; Draw Cart Bank count
+	ld a, [VAR_ROM_BANK_COUNT]
+	and $0f
+	add VRO_HEX_CHAR
+	ld [$9a2b], a ; low nibble
+	ld a, [VAR_ROM_BANK_COUNT]
+	swap a
+	and $0f
+	add VRO_HEX_CHAR
+	ld [$9a2a], a ; high nibble
+
+	; Draw slash between bank counts
+	ld a, "/"
+	ld [$9a29], a ; high nibble
 	ret
 
 ; *** Pause by looping a few times ***
