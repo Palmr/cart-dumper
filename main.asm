@@ -37,13 +37,14 @@ CART_ROM_SIZE EQU $0148
 CART_RAM_SIZE EQU $0149
 
 ; HRAM Variable locations
-VAR_CART_IN EQU _HRAM+0
-VAR_TX_TIMER EQU _HRAM+1
-VAR_CURRENT_BANK EQU _HRAM+2
-VAR_DUMP_PROGRESS EQU _HRAM+3
-VAR_MBC EQU _HRAM+4
-VAR_INITIAL_A_REG EQU _HRAM+5
-VAR_COUNT EQU 6
+VAR_INITIAL_A_REG EQU _HRAM+0
+VAR_CART_IN EQU _HRAM+1
+VAR_TX_TIMER EQU _HRAM+2
+VAR_CURRENT_BANK EQU _HRAM+3
+VAR_DUMP_PROGRESS EQU _HRAM+4
+VAR_MBC EQU _HRAM+5
+VAR_ROM_BANK_COUNT EQU _HRAM+6
+VAR_COUNT EQU 7
 
 ; RAM CONST locations (don't shuffle the lines below)
 RC_START EQU _RAM + $0FFF
@@ -290,7 +291,10 @@ PlayCartridge::
 
 ; *** Parse info from the cart header ***
 ParseCartInfo::
-	; get the MBC type
+	ld a, [VAR_CART_IN]
+	cp TRUE
+	ret nz
+	; Get the MBC type
 	ld a, [CART_TYPE]
 	cp $23
 	jr c, .knownCartType ; if carry, type < $23, can use LUT
@@ -303,6 +307,16 @@ ParseCartInfo::
 	add hl, bc
 	ld a, [hl]
 .setMBCVar ld [VAR_MBC], a
+	; Get the ROM bank count
+	ld a, [CART_ROM_SIZE]
+	ld b, 1
+	inc a
+.romBankLoop sla b
+	dec a
+	cp 0
+	jr nz, .romBankLoop
+	ld a, b
+	ld [VAR_ROM_BANK_COUNT], a
 	ret
 
 ; *** All debug display code ***
@@ -419,16 +433,12 @@ DumpRomViaSerial::
 	; Draw the dumping dump status line
 	ld a, 2
 	call SetDumpStatusLine
-	; Start extract routine (ROM-only currently)
+	; zero the current bank
 	ld a, 0
-	ld [VAR_CURRENT_BANK], a ; zero the current bank
+	ld [VAR_CURRENT_BANK], a
+	; Start extract routine (ROM-only currently)
 	ld hl, $0000 ; start at the beginning...
-	ld bc, $8000 ; end of both ROM banks (okay for cart type 0)
-	inc	b
-	inc	c
-	jr	.txJumpStart
 .txLoop:
-	call DrawProgress
 	call DebugExtractAddress
 	;; Send byte via serial
   ld a,[hl+]
@@ -450,10 +460,15 @@ DumpRomViaSerial::
 .txDone:
 	; pause a bit between bytes being transferred
 	call PostTransmitPause
-.txJumpStart	dec	c
-	jr	nz, .txLoop
-	dec	b
-	jr	nz, .txLoop
+	call DrawProgress
+
+	; Loop if all banks not transferred yet
+	ld a, [VAR_CURRENT_BANK]
+	ld b, a
+	ld a, [VAR_ROM_BANK_COUNT]
+	cp b
+	jr nz, .txLoop
+
 	call ClearProgressBar
 	ret
 
@@ -496,17 +511,35 @@ DrawProgress::
 ; *** Use HL to set the current bank number ***
 UpdateBankNumber::
 	;; Increase bank number whenever hl at $4000 (start of bank 1)
-	ld a, h ; Test high byte
-	cp $40
-	jr nz, .endBankNoIncr
 	ld a, l ; Test low byte
 	cp $00
 	jr nz, .endBankNoIncr
-	ld a, [VAR_CURRENT_BANK] ; If HL=$4000 then increment the bank counter
+	ld a, h ; Test high byte
+	cp $40
+	jr z, .bankIncr
+	cp $80
+	jr nz, .endBankNoIncr
+.bankIncr ld a, [VAR_CURRENT_BANK] ; If HL=$4000 then increment the bank counter
 	inc a
 	ld [VAR_CURRENT_BANK], a
+	call ChangeMBC1Bank
+	call ResetAddress
 	call ClearProgressBar
 .endBankNoIncr
+	ret
+
+; *** Change ROM Bank for MBC1 carts to bank number in var ***
+ChangeMBC1Bank::
+	ld a, [VAR_MBC]
+	cp $01
+	ret nz ; return if not MBC1
+	ld a, [VAR_CURRENT_BANK]
+	ld [$2000], a
+	ret
+
+; *** Reset HL back to $4000 to read the high bank ***
+ResetAddress::
+	ld hl, $4000
 	ret
 
 ; *** Reset the progress bar ***
@@ -527,6 +560,7 @@ ClearProgressBar::
 	pop de
 	pop hl
 	ret
+
 
 ; *** Use HL to set the current bank number ***
 DebugExtractAddress::
@@ -563,7 +597,7 @@ PostTransmitPause::
 .loop:	ld a, [VAR_TX_TIMER] ; inc timer
 	inc a ; inc timer
 	ld [VAR_TX_TIMER], a ; inc timer
-	cp $7f ; Amount to loop
+	cp $0f ; Amount to loop
 	jr nz, .loop
 	ret
 
