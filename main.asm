@@ -42,7 +42,8 @@ VAR_TX_TIMER EQU _HRAM+1
 VAR_CURRENT_BANK EQU _HRAM+2
 VAR_DUMP_PROGRESS EQU _HRAM+3
 VAR_MBC EQU _HRAM+4
-VAR_COUNT EQU 5
+VAR_INITIAL_A_REG EQU _HRAM+5
+VAR_COUNT EQU 6
 
 ; RAM CONST locations (don't shuffle the lines below)
 RC_START EQU _RAM + $0FFF
@@ -69,6 +70,9 @@ initialise:
 	di
 	ld	sp, $ffff ; init stack pointer
 
+	; Store the A Register to reset when jumping into the gameboy
+	ld [VAR_INITIAL_A_REG], a
+
 	; turn the display off
 	call StopLCD
 
@@ -79,11 +83,13 @@ initialise:
 	ld  [rSCX], a
 	ld  [rSCY], a
 
-	; Zero out HRAM (where I store vars)
-	ld   	a, 0
-	ld   	hl, _HRAM
-	ld  	bc, VAR_COUNT
-	call	mem_Set
+	; Initialise HRAM variables
+	ld a, 0
+	ld [VAR_CART_IN], a
+	ld [VAR_TX_TIMER], a
+	ld [VAR_CURRENT_BANK], a
+	ld [VAR_DUMP_PROGRESS], a
+	ld [VAR_MBC], a
 
 	;; VRAM loads
 	; load font to vram (Comes in two tile sets)
@@ -249,10 +255,10 @@ SECTION "Code for RAM",CODE[$4000]
 	call ValidCartTest
 	call ParseCartInfo
 
-;; ROM Extraction
+;; Commands
 	ld a, [VAR_CART_IN]
 	cp TRUE
-	jr nz, .noExtract
+	jr nz, .noCommand
 	;; Extract ROM if Start pressed and there's a cart in
 	ld a, P1F_4
 	ld [rP1], a
@@ -260,11 +266,28 @@ SECTION "Code for RAM",CODE[$4000]
 	ld a, [rP1]
 	and PADF_START
 	call z, DumpRomViaSerial
-.noExtract:
+	ld a, P1F_4
+	ld [rP1], a
+	ld a, [rP1]
+	ld a, [rP1]
+	and PADF_B
+	call z, PlayCartridge
+.noCommand:
 
 	jp .mainLoop
 
 ;; Functions for RAM
+; *** Jump to the code on the cartridge ***
+PlayCartridge::
+	ld a, [VAR_INITIAL_A_REG]
+	cp $FF
+	ld bc, $0013
+	ld de, $00D8
+	ld hl, $014D
+	ld sp, $FFFE
+	jp $8100 ; This jump address will be updated when copied to ram, $8100 -> $0100 (I should find a better fix for this...)
+	; No need to return!
+
 ; *** Parse info from the cart header ***
 ParseCartInfo::
 	; get the MBC type

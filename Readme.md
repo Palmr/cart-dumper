@@ -38,7 +38,9 @@ Currently tested using an EMS 64M flashcart and both a Gameboy pocket and Gamebo
   - [x] Nice dump process bar
   - [ ] Menu for dump methods
   - [ ] Menu for what to dump (rom/save)
-  - Option to boot the cart that's plugged in
+  - [ ] Option to boot the cart that's plugged in
+    - [x] Works on DMG
+    - [ ] Works on CGB (need to make cart CGB compatible)
 
 ## To Build
 
