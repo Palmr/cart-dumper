@@ -243,6 +243,7 @@ SECTION "Code for RAM",CODE[$4000]
 	jr nz, .noCartDraw
 	; If cart inserted, draw cart title
 	call DrawCartTitle
+	call DebugBankNumbers
 	jr .cartTitleEnd
 .noCartDraw:
 	; Draw the no-cart title
@@ -567,6 +568,7 @@ DebugExtract::
 	ld a,[rSTAT]
 	and STATF_BUSY
 	ret nz ; return straight away if screen is busy
+	call DebugBankNumbers
 	; Draw hl
 	; H
 	ld a, h
@@ -588,7 +590,9 @@ DebugExtract::
 	and $0f
 	add VRO_HEX_CHAR
 	ld [$9a2f], a ; high nibble
+	ret
 
+DebugBankNumbers::
 	; Draw Current Bank Number
 	ld a, [VAR_CURRENT_BANK]
 	and $0f
