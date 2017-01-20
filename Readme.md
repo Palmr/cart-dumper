@@ -24,9 +24,13 @@ Currently tested using an EMS 64M flashcart and both a Gameboy pocket and Gamebo
 - [ ] Dump cartridge data over seial port when Start pressed
   - [x] Support basic 32K cartridge
   - [ ] Support ROM banking
+    - [x] MBC1
+    - [ ] MBC2
+    - [ ] MBC3
+    - [ ] MBC5
   - [ ] Support SRAM reading
   - [ ] Add support for checking the data was properly recieved
-  - [ ] Screen display dump progress
+  - [x] Screen display dump progress
     - Add stat check in TX loop, only display if clear. No need to loop-block
   - [ ] Option to dump using external clock
     - Would need a re-work of the post-TX delay timer code
