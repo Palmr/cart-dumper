@@ -461,7 +461,10 @@ DumpRomViaSerial::
 .txDone:
 	; pause a bit between bytes being transferred
 	call PostTransmitPause
+	; Update the progress bar
 	call DrawProgress
+	; Update the ROM bank number
+	call UpdateBankNumber
 
 	; Loop if all banks not transferred yet
 	ld a, [VAR_CURRENT_BANK]
@@ -475,8 +478,6 @@ DumpRomViaSerial::
 
 ; *** Use HL to set update the progress ***
 DrawProgress::
-	call UpdateBankNumber
-
 	;; Increase VAR_DUMP_PROGRESS whenever hl % 0400 == 0 (every 1024 bytes, 16 times per bank)
 	ld a, l ; Test low byte
 	cp $00
@@ -504,6 +505,9 @@ DrawProgress::
 .loop ld [hl+], a
 .jumpStart dec d
 		jr nz, .loop
+		; Draw partial tile for the current block
+		ld a, TILE_LOADING_PARTIAL
+		ld [hl], a
 	pop de
 	pop hl
 
@@ -521,25 +525,45 @@ UpdateBankNumber::
 	cp $80
 	jr nz, .endBankNoIncr
 .bankIncr ld a, [VAR_CURRENT_BANK] ; If HL=$4000 then increment the bank counter
-	inc a
+	inc a ; Bank number will be 1 based, not 0 based, so inc the current bank number first
 	ld [VAR_CURRENT_BANK], a
-	call ChangeMBC1Bank
-	call ResetAddress
+	call ChangeMBCROMBank
 	call ClearProgressBar
+	call ResetROMAddress
 .endBankNoIncr
 	ret
 
-; *** Change ROM Bank for MBC1 carts to bank number in var ***
-ChangeMBC1Bank::
+; *** Change ROM Bank to bank number in var ***
+ChangeMBCROMBank::
 	ld a, [VAR_MBC]
 	cp $01
-	ret nz ; return if not MBC1
+	jr nz, .notMBC1
 	ld a, [VAR_CURRENT_BANK]
 	ld [$2000], a
+	jr .end
+.notMBC1:
+	cp $02
+	jr nz, .notMBC2
+	ld a, [VAR_CURRENT_BANK]
+	ld [$2100], a
+	jr .end
+.notMBC2:
+	cp $03
+	jr nz, .notMBC3
+	ld a, [VAR_CURRENT_BANK]
+	ld [$2000], a
+	jr .end
+.notMBC3:
+	cp $05
+	jr nz, .end
+	ld a, [VAR_CURRENT_BANK]
+	ld [$2000], a
+	jr .end
+.end:
 	ret
 
 ; *** Reset HL back to $4000 to read the high bank ***
-ResetAddress::
+ResetROMAddress::
 	ld hl, $4000
 	ret
 
@@ -558,6 +582,9 @@ ClearProgressBar::
 		ld [hl+], a
 		dec d
 		jr nz, .loop
+		; Re-draw the end of the bar
+		ld a, TILE_LOADING_END
+		ld [hl], a
 	pop de
 	pop hl
 	ret
