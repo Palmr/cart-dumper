@@ -254,6 +254,14 @@ rWY EQU $FF4A
 ; --
 rWX EQU $FF4B
 
+; --
+; -- KEY1 ($FF4D)
+; -- GBC Mode – Speed Switch (R/W)
+; --
+; -- Bit 7 - Current Speed (0=Normal, 1=Double) (Read Only)
+; -- Bit 0 - Prepare Speed Switch (0=No, 1=Prepare) (Read/Write)
+; --
+rKEY1 EQU $FF4D
 
 ;***************************************************************************
 ;*
@@ -628,7 +636,7 @@ ROM_HEADER:   MACRO
  DB $BB,$BB,$67,$63,$6E,$0E,$EC,$CC,$DD,$DC,$99,$9F,$BB,$B9,$33,$3E
 
  DB \1                        ; Cart name - 15bytes
- DB 0                         ; $143
+ DB $00                       ; $143 - CGB Flag ($00 = DMG, $80 = CGB support, $C0 = CGB only)
  DB 0,0                       ; $144 - Licensee code (not important)
  DB 0                         ; $146 - SGB Support indicator
  DB \2                        ; $147 - Cart type
