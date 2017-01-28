@@ -257,24 +257,25 @@ SECTION "Code for RAM",CODE[$4000]
 	call ValidCartTest
 	call ParseCartInfo
 
-;; Commands
+;; Cart Commands
 	ld a, [VAR_CART_IN]
 	cp TRUE
-	jr nz, .noCommand
-	;; Extract ROM if Start pressed and there's a cart in
+	jr nz, .noCart
+	;; Extract ROM if Start pressed
 	ld a, P1F_4
 	ld [rP1], a
 	ld a, [rP1]
 	ld a, [rP1]
 	and PADF_START
 	call z, DumpRomViaSerial
+	;; Play cart if A pressed
 	ld a, P1F_4
 	ld [rP1], a
 	ld a, [rP1]
 	ld a, [rP1]
-	and PADF_B
+	and PADF_A
 	call z, PlayCartridge
-.noCommand:
+.noCart:
 
 	jp .mainLoop
 
@@ -441,6 +442,13 @@ DumpRomViaSerial::
 	ld hl, $0000 ; start at the beginning...
 .txLoop:
 	call DebugExtract
+	;; Check for B pressed - cancel
+	ld a, P1F_4
+	ld [rP1], a
+	ld a, [rP1]
+	ld a, [rP1]
+	and PADF_B
+	jr z, .cancel
 	;; Send byte via serial
   ld a,[hl+]
 	ld	[rSB], a ; Put byte in serial buffer
@@ -472,7 +480,7 @@ DumpRomViaSerial::
 	ld a, [VAR_ROM_BANK_COUNT]
 	cp b
 	jr nz, .txLoop
-
+.cancel
 	call ClearProgressBar
 	ret
 
