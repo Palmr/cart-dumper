@@ -25,9 +25,9 @@ Currently tested using an EMS 64M flashcart and both a Gameboy pocket and Gamebo
   - [x] Support basic 32K cartridge
   - [ ] Support ROM banking
     - [x] MBC1
-    - [ ] MBC2
-    - [ ] MBC3
-    - [ ] MBC5
+    - [x] MBC2
+    - [x] MBC3
+    - [x] MBC5
   - [ ] Support SRAM reading
   - [ ] Add support for checking the data was properly recieved
   - [x] Screen display dump progress

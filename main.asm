@@ -537,28 +537,17 @@ UpdateBankNumber::
 ChangeMBCROMBank::
 	ld a, [VAR_MBC]
 	cp $01
-	jr nz, .notMBC1
-	ld a, [VAR_CURRENT_BANK]
-	ld [$2000], a
-	jr .end
-.notMBC1:
+	jr z, .changeROMBank ; MBC1
 	cp $02
-	jr nz, .notMBC2
-	ld a, [VAR_CURRENT_BANK]
-	ld [$2100], a
-	jr .end
-.notMBC2:
+	jr z, .changeROMBank ; MBC2
 	cp $03
-	jr nz, .notMBC3
-	ld a, [VAR_CURRENT_BANK]
-	ld [$2000], a
-	jr .end
-.notMBC3:
+	jr z, .changeROMBank ; MBC3
 	cp $05
-	jr nz, .end
-	ld a, [VAR_CURRENT_BANK]
-	ld [$2000], a
+	jr z, .changeROMBank ; MBC5
 	jr .end
+.changeROMBank
+	ld a, [VAR_CURRENT_BANK]
+	ld [$2100], a ; $2100-$21FF needed for MBC2, $2000-$2FFF for all others
 .end:
 	ret
 
