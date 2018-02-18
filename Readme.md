@@ -48,7 +48,7 @@ Currently tested using an EMS 64M flashcart and both a Gameboy pocket and Gamebo
 
 ## To Build
 
-Get [RGBDS (Rednex Game Boy Development System)](https://github.com/bentley/rgbds) and change the paths in ./compile.bat to point to the RGBDS executables. The compile batch file assembles, links and fixes creating a cart-dumper.gb file to use.
+Get [RGBDS (Rednex Game Boy Development System)](https://github.com/bentley/rgbds) and run make. The makefile assembles, links and fixes creating a cart-dumper.gb file to use.
 
 ## To Use
 
