@@ -1,9 +1,9 @@
-INCLUDE "moved-address-fix\\opcode-length-LUT.asm"
+INCLUDE "moved-address-fix/opcode-length-LUT.asm"
 
 ;***************************************************************************
 ;*
 ;* updateMovedAddresses - Walk through bytecount bytes from pDest and update
-;*												addresses for jump/call instructions
+;*                        addresses for jump/call instructions
 ;*
 ;* input:
 ;*   hl - pCodeStart

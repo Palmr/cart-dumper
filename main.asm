@@ -1,6 +1,6 @@
 INCLUDE "gbhw.inc"
 INCLUDE "tiles.inc"
-INCLUDE "moved-address-fix\\moved-address-fix.asm"
+INCLUDE "moved-address-fix/moved-address-fix.asm"
 
 
 ; VRAM Offsets
