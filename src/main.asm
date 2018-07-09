@@ -65,7 +65,7 @@ SECTION "Org $100",HOME[$100]
   ROM_HEADER "CART DUMPER  NP", ROM_NOMBC, ROM_SIZE_32KBYTE, RAM_SIZE_0KBYTE
 
 	; Include GABY Memory Manipulation Code
-  INCLUDE "memory.asm"
+  INCLUDE "memory.inc"
 
 initialise:
 	di

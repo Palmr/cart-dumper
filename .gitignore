@@ -1,4 +1,1 @@
-*.gb
-*.map
-*.sym
-*.obj
+build/*
