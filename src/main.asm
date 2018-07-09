@@ -1,7 +1,7 @@
 INCLUDE "gbhw.inc"
 INCLUDE "tiles.inc"
 INCLUDE "moved-address-fix/moved-address-fix.asm"
-
+INCLUDE "memory.inc"
 
 ; VRAM Offsets
 VRO_HEX_CHAR EQU $F0
@@ -58,14 +58,11 @@ RC_CART_MBC_TYPE_LUT_LEN EQU 35
 RC_CART_MBC_TYPE_LUT EQU RC_DUMP_STATUS_LINES - RC_CART_MBC_TYPE_LUT_LEN
 
 
-SECTION "Org $100",HOME[$100]
+SECTION "init",ROM0[$100]
 	nop
 	jp	initialise
 
-  ROM_HEADER "CART DUMPER  NP", ROM_NOMBC, ROM_SIZE_32KBYTE, RAM_SIZE_0KBYTE
-
-	; Include GABY Memory Manipulation Code
-  INCLUDE "memory.inc"
+SECTION "main",ROM0[$150]
 
 initialise:
 	di
@@ -222,7 +219,7 @@ CartMBCTypeLUT:
 
 
 
-SECTION "Code for RAM",CODE[$4000]
+SECTION "Code for RAM",ROMX[$4000]
 	nop
 .mainLoop:
 	nop

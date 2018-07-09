@@ -30,7 +30,7 @@ lcd_WaitVRAM: MACRO
 
         PUSHS           ; Push the current section onto assember stack.
 
-        SECTION "Memory1 Code",HOME
+        SECTION "Memory1 Code",ROM0
 
 ;***************************************************************************
 ;*

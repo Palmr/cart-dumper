@@ -1,4 +1,4 @@
-SECTION "LUT", HOME
+SECTION "LUT", ROM0
 
 ; Look Up Table with length of opcodes (number of bytes for the opcode and any parameters it requires)
 OpcodeLengthLUT:
